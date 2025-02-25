@@ -4,30 +4,32 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <sys/wait.h>
 #include <stdlib.h>
+#include <signal.h>
+
+void rpr(int sign)
+{
+    int stat;
+    while(wait3(&stat, WNOHANG, (struct rusage *)0) >= 0);
+}
 
 int main (int argc, char **argv)
 {
-    int length, sockMain, cnct, buf, chk, clientSock, childsihave;
-    struct sockaddr_in serv, client;
-    childsihave = 0;
+    int sockMain, cnct, chk, clientSock, stat, chlds;
+    struct sockaddr_in serv;
     sockMain = socket(AF_INET, SOCK_STREAM, 0);
     if (sockMain < 0)
     {
         std::cerr << "cant open socket" << '\n';
         return 1;
     }
-    buf = 0;
+    chlds = 0;
     socklen_t size = sizeof(struct sockaddr);
     serv.sin_family = AF_INET;
     serv.sin_addr.s_addr = INADDR_ANY;
     serv.sin_port = 0;
-    client.sin_addr.s_addr = AF_INET;
-    client.sin_family =INADDR_ANY;
-    client.sin_port = 0;
-    socklen_t c_size = sizeof(client);
+    signal(SIGCHLD, rpr);
     cnct = bind(sockMain, (struct sockaddr *) &serv, sizeof(serv));
     if (cnct == -1)
     {
@@ -42,36 +44,51 @@ int main (int argc, char **argv)
     std::cout << "server port is: " << ntohs(serv.sin_port) << '\n';
     while (1)
     {
-        if ((chk = listen(sockMain, 20)) == -1)
+        if ((chk = listen(sockMain, 5)) == -1)
         {
             std::cerr << "error on listening" << '\n';
             return 4;
         }
-        childsihave++;
+        if ((clientSock = accept(sockMain, (struct sockaddr *) 0, 0)) == -1)
+        {
+            std::cerr << "error while accepting" << '\n';
+            return 5;
+        }
+        std::cout << "I was connected!" << '\n';
+        chlds++;
         pid_t im = fork();
         switch (im)
         {
             case -1:
                 std::cerr << "cant fork" << '\n';
-                wait(&childsihave);
+                wait(&stat);
                 return -1;
                 break;
             case 0:
-                if ((chk = listen(sockMain, 20)) == -1)
-                {
-                    std::cerr << "error on listening" << '\n';
-                    return 4;
+                while (1) {
+                    int buf = 0;
+                    ssize_t tmp = 0;
+                    tmp = recv(clientSock, &buf, 4, 0);
+                    std::cout << "i recive: " << buf << '\n';
+                    if (tmp == 0)
+                    {
+                        close(clientSock);
+                        exit(0);
+                    }
+                    std::cout << "I got the: " << buf << " and i send it back! " << "\n";
+                    send(clientSock, &buf, 4, 0);
                 }
-                if ((clientSock = accept(sockMain, (struct sockaddr *) &client, &c_size)) == -1)
-                {
-                    std::cerr << "error while accepting" << '\n';
-                    return 5;
-                }
-                std::cout << "I, the : " << im << " got connected with: " << ntohs(client.sin_port) << '\n';
                 break;
             default:
+            if(chlds == 5)
+            {
+                wait(&stat);
+                close(sockMain);
+                close(clientSock);
+                exit(0);
+            }
+            break;
         }
     }
-    wait(&childsihave);
     return 0;
 }

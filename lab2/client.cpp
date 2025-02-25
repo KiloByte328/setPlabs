@@ -8,40 +8,20 @@
 
 int main(int argc, char **argv)
 {
-    int length, sockMain, serv_socket, buf;
-    struct sockaddr_in serv, client;
+    int sockMain, serv_socket;
+    struct sockaddr_in serv;
     sockMain = socket(AF_INET, SOCK_STREAM, 0);
     if (sockMain < 0)
     {
         std::cerr << "cant open socket" << '\n';
-        close(serv_socket);
         close(sockMain);
         return 1;
     }
-    socklen_t size = sizeof(struct sockaddr);
     serv.sin_family = AF_INET;
     serv.sin_addr.s_addr = INADDR_ANY;
+    int sectosleep = atoi(argv[2]);
     serv.sin_port = htons(atoi(argv[1]));
     socklen_t s_size = sizeof(serv);
-    client.sin_family = AF_INET;
-    client.sin_addr.s_addr = INADDR_ANY;
-    client.sin_port = 0;
-    int cnct = bind(sockMain, (struct sockaddr *) &client, sizeof(client));
-    if (cnct == -1)
-    {
-        std::cerr << "cant bind" << '\n';
-        close(serv_socket);
-        close(sockMain);
-        return 2;
-    }
-    if (getsockname(sockMain, (struct sockaddr *) &client, &size))
-    {
-        std::cerr << "cant get sock name" << '\n';
-        close(serv_socket);
-        close(sockMain);
-        return 3;
-    }
-    std::cout << "my port is: " << ntohs(client.sin_port) << '\n';
     if ((serv_socket = connect(sockMain, (struct sockaddr*) &serv, s_size)) == -1)
     {
         std::cerr << "cant connect" << '\n';
@@ -50,12 +30,20 @@ int main(int argc, char **argv)
         return 4;
     }
     std::cout << "i got connected with " << ntohs(serv.sin_port) << '\n';
-    while (1)
+    for(int i = 0; i <= sectosleep ; i++)
     {
-        sleep(10);
-        close(serv_socket);
-        close(sockMain);
-        exit(0);
+        std::cout << "I send the: " << sectosleep << " after this seconds " << sectosleep <<'\n';
+        if (send(sockMain, &sectosleep, 4, 0) < 0)
+        {
+            std::cerr << "Error on sending\n";
+            exit(1);
+        }
+        sleep(sectosleep);
+        recv(sockMain, &sectosleep, 4, 0);
+        std::cout << "I recive: " << sectosleep << " now i gonna sleep to " << sectosleep <<'\n';
+        std::cout << "I will end my program after: " << sectosleep << " seconds" << '\n';
     }
+    close(serv_socket);
+    close(sockMain);
     return 0;
 }
