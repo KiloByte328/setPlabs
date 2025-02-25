@@ -80,7 +80,7 @@ int main (int argc, char **argv)
                 }
                 break;
             default:
-            if(chlds == 5)
+            if(chlds >= 5)
             {
                 wait(&stat);
                 close(sockMain);
