@@ -4,19 +4,52 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include <sys/wait.h>
 #include <stdlib.h>
-#include <signal.h>
+#include <fstream>
+#include <pthread.h>
 
-void rpr(int sign)
+
+pthread_mutex_t g_mut;
+pthread_barrier_t bar;
+
+int s_func(int sock)
 {
-    int stat;
-    while(wait3(&stat, WNOHANG, (struct rusage *)0) >= 0);
+    //pthread_mutexattr_t m_atrbs;
+    pthread_mutex_init(&g_mut, NULL);
+/*     std::fstream output("output.txt", std::ios::app); */
+    int buf;
+    while (1) 
+    {
+    int tmp = recv(sock, &buf, 4, 0);
+    std::cout << "I have recived: " << tmp << " bytes\n";
+    if (tmp == 0)
+    {
+        std::cout << "Now this thread will be free\n";
+        pthread_mutex_unlock(&g_mut);
+        pthread_exit(0);
+    }
+    std::cout << "I recive: " << buf << " Now i gonna put it in file!\n";
+    pthread_mutex_lock(&g_mut);
+/*     output << buf << '\n'; */
+    FILE* fp;
+    if (fp = fopen("output.txt", "a"))
+    {
+        std::cout << fp << '\n';
+    }
+    fprintf(fp, "%d\n", buf);
+    fclose(fp);
+    pthread_mutex_unlock(&g_mut);
+    sleep(buf);
+    std::cout << "now i put it in file and sand it back: " << buf << '\n';
+    send(sock, &buf, 4, 0);
+    }
 }
 
 int main (int argc, char **argv)
 {
-    int sockMain, cnct, chk, clientSock, stat, chlds;
+    int sockMain, cnct, chk, clientSock, chlds;
+    pthread_t threads[20];
+    pthread_attr_t ti;
     struct sockaddr_in serv;
     sockMain = socket(AF_INET, SOCK_STREAM, 0);
     if (sockMain < 0)
@@ -29,7 +62,6 @@ int main (int argc, char **argv)
     serv.sin_family = AF_INET;
     serv.sin_addr.s_addr = INADDR_ANY;
     serv.sin_port = 0;
-    signal(SIGCHLD, rpr);
     cnct = bind(sockMain, (struct sockaddr *) &serv, sizeof(serv));
     if (cnct == -1)
     {
@@ -42,6 +74,8 @@ int main (int argc, char **argv)
         return 3;
     }
     std::cout << "server port is: " << ntohs(serv.sin_port) << '\n';
+    pthread_attr_init(&ti);
+    pthread_attr_setdetachstate(&ti, PTHREAD_CREATE_JOINABLE /* PTHREAD_CREATE_DETACHED */);
     while (1)
     {
         if ((chk = listen(sockMain, 5)) == -1)
@@ -55,40 +89,22 @@ int main (int argc, char **argv)
             return 5;
         }
         std::cout << "I was connected!" << '\n';
+        pthread_create(&threads[chlds], &ti, (void*(*)(void*)) s_func, (void *)clientSock);
         chlds++;
-        pid_t im = fork();
-        switch (im)
+        std::cout << "Now i have: " << chlds << " this many childs\n";
+        if(chlds >= 5)
         {
-            case -1:
-                std::cerr << "cant fork" << '\n';
-                wait(&stat);
-                return -1;
-                break;
-            case 0:
-                while (1) {
-                    int buf = 0;
-                    ssize_t tmp = 0;
-                    tmp = recv(clientSock, &buf, 4, 0);
-                    std::cout << "i recive: " << buf << '\n';
-                    if (tmp == 0)
-                    {
-                        close(clientSock);
-                        exit(0);
-                    }
-                    std::cout << "I got the: " << buf << " and i send it back! " << "\n";
-                    send(clientSock, &buf, 4, 0);
-                }
-                break;
-            default:
-            if(chlds == 5)
+            /* pthread_barrier_init(&bar, NULL, chlds+1); */
+            for(int x = 0; x < chlds; x++)
             {
-                wait(&stat);
-                close(sockMain);
-                close(clientSock);
-                exit(0);
+                std::cout << "now im waiting: " << x << '\n';
+                pthread_join(threads[x], NULL);
             }
-            break;
+            std::cout << "Change da world, i accompish the mission! Goodbye\n";
+            pthread_attr_destroy(&ti);
+            return 0;
         }
     }
+    pthread_attr_destroy(&ti);
     return 0;
 }
