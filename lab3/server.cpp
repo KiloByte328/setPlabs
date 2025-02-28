@@ -75,7 +75,8 @@ int main (int argc, char **argv)
     }
     std::cout << "server port is: " << ntohs(serv.sin_port) << '\n';
     pthread_attr_init(&ti);
-    pthread_attr_setdetachstate(&ti, PTHREAD_CREATE_JOINABLE /* PTHREAD_CREATE_DETACHED */);
+    pthread_attr_setdetachstate(&ti, /* PTHREAD_CREATE_JOINABLE */ PTHREAD_CREATE_DETACHED);
+    pthread_barrier_init(&bar, NULL, 6);
     while (1)
     {
         if ((chk = listen(sockMain, 5)) == -1)
@@ -94,14 +95,15 @@ int main (int argc, char **argv)
         std::cout << "Now i have: " << chlds << " this many childs\n";
         if(chlds >= 5)
         {
-            /* pthread_barrier_init(&bar, NULL, chlds+1); */
-            for(int x = 0; x < chlds; x++)
+            pthread_barrier_wait(&bar);
+/*             for(int x = 0; x < chlds; x++)
             {
                 std::cout << "now im waiting: " << x << '\n';
                 pthread_join(threads[x], NULL);
-            }
+            } */
             std::cout << "Change da world, i accompish the mission! Goodbye\n";
             pthread_attr_destroy(&ti);
+            pthread_barrier_destroy(&bar);
             return 0;
         }
     }
