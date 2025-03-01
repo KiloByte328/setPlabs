@@ -76,7 +76,7 @@ int main (int argc, char **argv)
     std::cout << "server port is: " << ntohs(serv.sin_port) << '\n';
     pthread_attr_init(&ti);
     pthread_attr_setdetachstate(&ti, /* PTHREAD_CREATE_JOINABLE */ PTHREAD_CREATE_DETACHED);
-    pthread_barrier_init(&bar, NULL, 6);
+    pthread_barrier_init(&bar, NULL, 5);
     while (1)
     {
         if ((chk = listen(sockMain, 5)) == -1)
