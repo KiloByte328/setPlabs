@@ -64,7 +64,7 @@ int main (int argc, char **argv)
             std::cout << "I was connected\n";
             FD_SET(clientSock, &fd_s);
             FD_SET(clientSock, &fd_in);
-            msocks = fd_s.fds_bits[0];
+            msocks = fd_s.fds_bits[0]; // +1?
         }
         for(int x = 0; x < msocks; x++)
         {
@@ -73,7 +73,7 @@ int main (int argc, char **argv)
                 if (recv(x, &buf, 4, 0) == 0) {
                     std::cout << "So, my client close connection, so i will close connection too\n";
                     FD_CLR(x, &fd_s);
-                    msocks = fd_s.fds_bits[0];
+                    msocks = fd_s.fds_bits[0]; // +1?
                     close(x);
                 }
                 std::cout << "i get: " << buf << "\n";
