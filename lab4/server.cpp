@@ -38,30 +38,33 @@ int main (int argc, char **argv)
     FD_ZERO(&fd_s);
     FD_SET(sockMain, &fd_s);
     FD_SET(sockMain, &fd_in);
-    msocks = getdtablesize();
+    int allsocks = getdtablesize();
+    msocks = 2;
     std::cout << "server port is: " << ntohs(serv.sin_port) << '\n';
     std::cout << "msocks is: " << msocks << '\n';
     while (1)
     {
         std::memcpy(&fd_in, &fd_s, sizeof(fd_in));
-        if ((chk = listen(sockMain, 5)) == -1)
+        if ((chk = listen(sockMain, 20)) == -1)
         {
             std::cerr << "error on listening" << '\n';
             return 4;
         }
-        if (select(msocks, &fd_in, NULL, NULL, NULL) < 0)
+        if (select(allsocks, &fd_in, NULL, NULL, NULL) < 0)
         {
             std::cerr << "cant select\n";
             return 6;
         }
         if (FD_ISSET(sockMain, &fd_in)) {
-            if ( (clientSock = accept(sockMain, (struct sockaddr *) 0, 0)) == -1)
+            if ((clientSock = accept(sockMain, (struct sockaddr *) 0, 0)) == -1)
             {
                 std::cerr << "error while accepting" << '\n';
                 return 5;
             }
-            std::cout << "I was cnnected\n";
+            std::cout << "I was connected\n";
             FD_SET(clientSock, &fd_s);
+            FD_SET(clientSock, &fd_in);
+            msocks = fd_s.fds_bits[0];
         }
         for(int x = 0; x < msocks; x++)
         {
@@ -70,6 +73,7 @@ int main (int argc, char **argv)
                 if (recv(x, &buf, 4, 0) == 0) {
                     std::cout << "So, my client close connection, so i will close connection too\n";
                     FD_CLR(x, &fd_s);
+                    msocks = fd_s.fds_bits[0];
                     close(x);
                 }
                 std::cout << "i get: " << buf << "\n";
