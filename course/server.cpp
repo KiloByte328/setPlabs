@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/wait.h>
+#include <sys/un.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <vector>
@@ -23,6 +24,7 @@ typedef struct {
 //работает через внутренние сокеты и их пересвязку при создани нового дочернего процесса
 int main()
 {
+    std::string path = "/tmp/msk";
     int sockMain = 0, clientSock, innersock = 0, insckin, cnct, chk, story_at = 0;
     fd_set fd_old, fd_upd;
     std::vector<int> f_recv, innersocks, clients, stry;
@@ -31,24 +33,28 @@ int main()
     std::vector<pid_t> forks;
     std::size_t my_sock;
     std::wstring new_lgn, new_psw, msg, logined_as;
-    struct sockaddr_in me, innernet;
+    struct sockaddr_in me, f_test;
+    struct sockaddr_un innernet;
     std::wfstream flstream;
     message main_message;
-    if (socket(sockMain, SOCK_STREAM, 0) < 0)
+    sockMain = socket(AF_INET, SOCK_STREAM, 0);
+    unlink(path.c_str());
+    if (sockMain < 0)
     {
-        std::wcerr << L"cant open socket\n";
+        std::wcerr << L"can't open socket\n";
         return 1;
     }
-    if (socket(innersock, SOCK_STREAM, 0) < 0)
+    innersock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (innersock < 0)
     {
-        std::wcerr << L"cant open inner sock\n";
+        std::wcerr << L"can't open inner sock\n";
         return 32;
     }
     FD_ZERO(&fd_old);
     FD_ZERO(&fd_upd);
-    innernet.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    innernet.sin_family = AF_INET;
-    innernet.sin_port = 0;
+    memset(&innernet, 0, sizeof(innernet));
+    innernet.sun_family = AF_UNIX;
+    strncpy(innernet.sun_path, path.c_str(), sizeof(innernet.sun_path) - 1);
     me.sin_family = AF_INET;
     me.sin_addr.s_addr = INADDR_ANY;
     me.sin_port = 0;
@@ -59,7 +65,7 @@ int main()
         std::wcerr << L"cant bind\n";
         return 2;
     }
-    cnct = bind(innersock, (sockaddr *) &innernet, (socklen_t) sizeof(innernet));
+    cnct = bind(innersock, (sockaddr *) &innernet, sizeof(sockaddr_un));
     if (cnct == -1)
     {
         std::wcerr << L"cant bind inner socket\n";
@@ -67,12 +73,14 @@ int main()
     }
     FD_SET(sockMain, &fd_upd);
     FD_SET(innersock, &fd_upd);
-    if (getsockname(sockMain, (sockaddr*) &me, (socklen_t*)sz))
+    socklen_t sz2 = sizeof(f_test);
+    if (getsockname(sockMain, (sockaddr*) &f_test, &sz2))
     {
-        std::wcerr << L"cant get sock name\n";
+        perror("getsockname");
+        std::wcerr << L"can't get sock name\n";
         return 3;
     }
-    std::wcout << L"server port is: " << ntohs(me.sin_port) << L"\n";
+    std::wcout << L"server port is: " << ntohs(f_test.sin_port) << L"\n";
     while(true)
     {
         std::memcpy(&fd_old, &fd_upd, sizeof(fd_upd));
@@ -136,13 +144,7 @@ int main()
                     // FD_ZERO(&for_client);
                     FD_ZERO(&fd_old);
                     //FD_ZERO(&fd_upd);
-                    cnct = bind(innersock, (sockaddr *) &innernet, (socklen_t) sizeof(innernet));
-                    if (cnct == -1)
-                    {
-                        std::wcerr << L"cant bind inner socket\n";
-                        return 30;
-                    }
-                    if (connect(innersock, (sockaddr *) &me, sizeof(me)) < 0)
+                    if (connect(innersock, (sockaddr *) &innersock, sizeof(innersock)) < 0)
                     {
                         std::wcerr << L"cant connect to inner socket\n";
                         return 29;
