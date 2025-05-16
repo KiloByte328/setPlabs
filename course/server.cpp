@@ -12,7 +12,7 @@
 //#include <dpp/dpp.h>
 
 /// @brief типы сообщений: клиентские: 
-/// 0 - логин, 1 - сообщение, 2 - send/recive clients, 3 - conection with someone, 4 - mediafiles, 5 - история чата, ответ 0 - нету, 6 - end of session
+/// 0 - логин, 1 - сообщение, 2 - send/recive clients, 3 - conection as, 4 - connect with, 5 - история чата, ответ 0 - нету, 6 - end of session
 /// типы сообщений: служебные:
 /// 0 - новый логин(отправляет новый логин), 1 - удалить логин(отправляет удалённый логин), 2 - получить весь чат(получение всех логинов), 3 - залогинен как(отправляет логин)
 typedef struct {
@@ -30,7 +30,7 @@ int main()
     std::vector<sockaddr_in> clients_info;
     std::vector<pid_t> forks;
     std::size_t my_sock;
-    std::wstring new_lgn, new_psw, msg;
+    std::wstring new_lgn, new_psw, msg, logined_as;
     struct sockaddr_in me, innernet;
     std::wfstream flstream;
     message main_message;
@@ -131,7 +131,6 @@ int main()
                 // fork process lifetime
                 case 0:
                     my_sock = clients.size();
-                    message next_message;
                     // fd_set for_client;
                     // FD_ZERO(&for_client);
                     FD_ZERO(&fd_old);
@@ -155,7 +154,7 @@ int main()
                     //std::memcpy(&fd_old, &fd_upd, sizeof(fd_upd));
                     while(true) {
                         if (FD_ISSET(innersock, &fd_old)) {
-                            if (recv(innersock, &next_message ,sizeof(message), 0) == 0)
+                            if (recv(innersock, &main_message ,sizeof(message), 0) == 0)
                             {
                                 close(clients[my_sock]);
                                 close(innersock);
@@ -185,31 +184,42 @@ int main()
                                     }
                                     break;
                                 case 2:
-                                if (recv(innersock, &clients_info ,next_message.size, 0) == 0)
-                                {
-                                    close(clients[my_sock]);
-                                    close(innersock);
-                                    exit(1);
-                                    // если родительский узел ничего не отправил, то остановить всю деятельность
-                                }
-                                message to_client;
-                                to_client.type = 2;
-                                to_client.size = sizeof(logins);
-                                send(clientSock, &to_client, sizeof(to_client), 0);
-                                send(clientSock, &logins, sizeof(logins), 0);
-                                break;
+                                    if (recv(innersock, &clients_info ,main_message.size, 0) == 0)
+                                    {
+                                        close(clients[my_sock]);
+                                        close(innersock);
+                                        exit(1);
+                                    }
+                                    message to_client;
+                                    to_client.type = 2;
+                                    to_client.size = sizeof(logins);
+                                    send(clientSock, &to_client, sizeof(to_client), 0);
+                                    send(clientSock, &logins, sizeof(logins), 0);
+                                    break;
+                                case 3:
+                                    if (recv(innersock, &new_lgn, main_message.size, 0) == 0) {
+
+                                    }
+                                    for (auto i = logins.begin(); i != logins.end(); i++) {
+                                        if ((*i).compare(new_lgn) == 0) {
+                                            logins.erase(i);
+                                            break;
+                                        }
+                                    }
+                                    //send(clients[my_sock], &main_message, sizeof(main_message), 0);
+                                    //send(clients[my_sock], &new_lgn, sizeof(new_lgn), 0);
+                                    break;
                             }
                         }
                         if (FD_ISSET(clients[my_sock], &fd_old)) {
                             message from_client;
-                            int x;
                             if (recv(clients[my_sock], &from_client, sizeof(from_client), 0) == 0) {
                                 std::wcerr << "Cant recv from client, shuting down";
                                 from_client.type = 5;
                                 send(innersock, &from_client, sizeof(from_client), 0);
                             }
                             switch (from_client.type) {
-                                case 0:
+                                case -1:
                                     if (recv(clients[my_sock], &new_lgn, from_client.size, 0) == 0) {
 
                                     }
@@ -227,6 +237,11 @@ int main()
                                     send(innersock, &new_psw, sizeof(new_psw), 0);
                                     logins.push_back(new_lgn);
                                     passwords.push_back(new_psw);
+                                    break;
+                                case 0:
+                                    if (recv(clients[my_sock], &logined_as, from_client.size, 0) == 0) {
+
+                                    }
                                     break;
                                 case 1:
                                     if (recv(clients[my_sock], &msg, from_client.size, 0) == 0) {
@@ -356,6 +371,25 @@ int main()
                             if (i != in_socks) {
                                 send(i, &main_message, sizeof(main_message), 0);
                                 send(i, &new_lgn, sizeof(new_lgn), 0);
+                            }
+                        }
+                        break;
+                    case 2:
+                        break;
+                    case 3:
+                        if (recv(in_socks, &new_lgn, main_message.size, 0) == 0) {
+
+                        }
+                        for (auto& i : innersocks) {
+                            if (i != in_socks) {
+                                send(i, &main_message, sizeof(main_message), 0);
+                                send(i, &new_lgn, sizeof(new_lgn), 0);
+                            }
+                        }
+                        for (auto i = logins.begin(); i != logins.end(); i++) {
+                            if ((*i).compare(new_lgn) == 0) {
+                                logins.erase(i);
+                                break;
                             }
                         }
                         break;

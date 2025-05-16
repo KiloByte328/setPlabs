@@ -9,7 +9,7 @@
 #include <algorithm>
 
 typedef struct{ // структура чтобы отличать какое сообщение нам прийдёт/мы отошлём
-    int type; // 0 - новый логин, 1 - сообщение, 2 - send/recive clients, 3 - conection with someone, 4 - mediafiles, 5 - история чата, ответ 0 - нету, 6 - end of session
+    int type; // -1 - новый логин, 0 - логин, 1 - сообщение, 2 - send/recive clients, 3 - conection with someone, 4 - mediafiles, 5 - история чата, ответ 0 - нету, 6 - end of session
     std::size_t size; // отсылать media в два этапа? первый - размер, второй - название+тип данных(строка) ну и третий сама media
 } message;
 
@@ -65,7 +65,7 @@ int main(int argc, char** argv)
             auth = true;
             auto ans = std::find(other_clients.begin(), other_clients.end(), lgn);
             if (ans == other_clients.end()) {
-                main_message.type = 0;
+                main_message.type = -1;
                 main_message.size = sizeof(lgn);
                 send(sockMain, &main_message, sizeof(main_message), 0);
                 send(sockMain, &lgn, sizeof(lgn), 0);
@@ -73,6 +73,12 @@ int main(int argc, char** argv)
                 send(sockMain, &main_message, sizeof(main_message), 0);
                 send(sockMain, &psw, sizeof(psw), 0);
                 // send to server
+            }
+            else {
+                main_message.type = 0;
+                main_message.size = sizeof(lgn);
+                send(sockMain, &main_message, sizeof(main_message), 0);
+                send(sockMain, &lgn, sizeof(lgn), 0);
             }
         }
         if (auth) {
@@ -98,17 +104,17 @@ int main(int argc, char** argv)
                     i = other_clients[0];
                 }
             // вывод истории
-            main_message.type = 5;
-            send(sockMain, &main_message, sizeof(main_message), 0);
-            if (recv(sockMain, &main_message, sizeof(main_message), 0) == 0) {
+            // main_message.type = 5;
+            // send(sockMain, &main_message, sizeof(main_message), 0);
+            // if (recv(sockMain, &main_message, sizeof(main_message), 0) == 0) {
 
-            }
-            if (recv(sockMain, &history_of_chat, main_message.size, 0) == 0) {
+            // }
+            // if (recv(sockMain, &history_of_chat, main_message.size, 0) == 0) {
 
-            }
-            for (auto& i : history_of_chat) {
-                std::wcout << i << '\n';
-            }
+            // }
+            // for (auto& i : history_of_chat) {
+            //     std::wcout << i << '\n';
+            // }
             main_message.type = 1;
             std::wcout << L"Enter your next message\n";
             std::wcin >> typed_text;
