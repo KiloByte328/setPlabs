@@ -185,8 +185,6 @@ int main()
                                     msg.insert(0, buf, main_message.size);
                                     msg.append(" joined chat\n");
                                     history_of_chat.push_back(msg);
-                                    // send(clientSock, &main_message, sizeof(main_message), 0);
-                                    // send(clientSock, new_lgn.c_str(), sizeof(char) * new_lgn.size(), 0);
                                 break;
                                 case 1:
                                     if (recv(innersock, &buf, main_message.size, 0) == 0) {
@@ -197,8 +195,6 @@ int main()
                                     msg.clear();
                                     msg.insert(0, buf, main_message.size);
                                     history_of_chat.push_back(msg);
-                                    // send(clientSock, &main_message,sizeof(main_message), 0);
-                                    // send(clientSock, msg.c_str(), main_message.size, 0);
                                 break;
                                 case 2:
                                     if (recv(innersock, &buf ,main_message.size, 0) == 0)
@@ -220,12 +216,7 @@ int main()
                                     }
                                     msg.insert(0, duf, main_message.size);
                                     if (logined_as.compare(new_lgn) == 0) {
-                                        message to_client;
-                                        to_client.type = 2;
-                                        to_client.size = sizeof(char) * msg.size();
                                         history_of_chat.push_back(buf);
-                                        //send(clientSock, &to_client, sizeof(to_client), 0);
-                                        //send(clientSock, msg.c_str(), sizeof(char) * msg.size(), 0);
                                     }
                                 break;
                                 case 3:
@@ -245,8 +236,6 @@ int main()
                                     msg.clear();
                                     msg.insert(0, buf, main_message.size);
                                     msg.append(" leave the chat\n");
-                                    //send(clientSock, &main_message, sizeof(main_message), 0);
-                                    //send(clientSock, new_lgn.c_str(), main_message.size, 0);
                                 break;
                             }
                         }
@@ -403,7 +392,7 @@ int main()
                         break;
                     case 1:
                         if (recv(in_socks, &buf, main_message.size, 0) == 0) {
-                            std::cerr << "Can't recive message from inner\n";
+                            perror("recive fron inner fail ");
                             for (auto& i : innersocks)
                             {
                                 close(i);
