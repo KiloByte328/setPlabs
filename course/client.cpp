@@ -8,14 +8,34 @@
 #include <vector>
 #include <algorithm>
 #include <sys/ioctl.h>
+#include <signal.h>
+#include <termios.h>
+
+termios orig_termios;
+
+void disable_raw_mode() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+}
+
+void enable_raw_mode() {
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disable_raw_mode);
+
+    termios raw = orig_termios;
+    raw.c_lflag &= ~(ICANON | ECHO); 
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
 
 int clear_screen ()
 {
-  printf ("\033[H\033[2J");
+  std::cout << "\033[H\033[2J";
   return 0;
 }
 
-int get_screensize (int *rows, int *cols)
+int get_screensize (int *cols, int *rows)
 {
   struct winsize ws;
   if (ioctl (1, TIOCGWINSZ, &ws))
@@ -34,7 +54,14 @@ int cursorgoto (int col, int row)
     return -1;
   if ((Y < row) || (X < col))
     return -1;
-  printf ("\033[%d;%dH", row, col);
+  std::string t;
+  t.append("\033[");
+  t.append(std::to_string(row));
+  t.append(";");
+  t.append(std::to_string(col));
+  t.append("H");
+  //printf ("\033[%d;%dH", row, col);
+  std::cout << t << std::flush;
   return 0;
 }
 
@@ -46,32 +73,37 @@ typedef struct { // структура чтобы отличать какое с
 int main(int argc, char** argv)
 {
     if (argc < 2) {
-        std::wcerr << L"Usage of programm is: ./cli <port>\n";
+        std::wcerr << "Usage of programm is: ./cli <port>\n";
         exit(1);
     }
     int scrny, scrnx;
     get_screensize(&scrny, &scrnx);
-    if (scrny < 2) {
-        std::wcerr << L"Cant open in this little window\n";
+    if (scrny < 3) {
+        std::wcerr << "Cant open in this little window\n";
         exit(1);
     }
+    std::ios::sync_with_stdio(false);
     fd_set ffd;
     message main_message;
-    int sockMain, serv_socket;
-    std::vector<std::wstring> other_clients;
-    struct sockaddr_in serv;
-    bool auth = false;
-    bool newbi;
-    std::wstring choise, typed_text, tmp_lgn, tmp_message, typed_message;
-    std::vector<std::wstring> history_of_chat;
-    std::wstring lgn = L"\0", psw = L"\0";
+    int sockMain, serv_socket, pos_now, insk, sinsk;
+    std::vector<std::string> other_clients;
+    struct sockaddr_in serv, ins_set;
+    bool auth = false, newbi, private_message;
+    std::string choise, typed_text, tmp_lgn, tmp_message, typed_message;
+    std::vector<std::string> history_of_chat;
+    std::string lgn = "\0", psw = "\0";
+    char buf[100];
     sockMain = socket(AF_INET, SOCK_STREAM, 0);
     if (sockMain < 0)
     {
-        std::wcerr << "cant open socket" << '\n';
+        std::cerr << "cant open socket" << '\n';
         close(sockMain);
         return 1;
     }
+    FD_ZERO(&ffd);
+    ins_set.sin_addr.s_addr = IN_LOOPBACKNET;
+    ins_set.sin_family = AF_INET;
+    ins_set.sin_port = 0;
     serv.sin_family = AF_INET;
     serv.sin_addr.s_addr = INADDR_ANY;
     serv.sin_port = htons(atoi(argv[1]));
@@ -80,259 +112,244 @@ int main(int argc, char** argv)
     {
         std::wcerr << "cant connect" << '\n';
         close(sockMain);
-        close(serv_socket);
+    
         return 4;
     }
-    std::wcout << L"i got connected with " << ntohs(serv.sin_port) << L"\n";
-    if (recv(serv_socket, &main_message, sizeof(main_message), 0) < 0)
-    {
-        close(serv_socket);
-        close(sockMain);
-        exit(1);
-        //exit
-    }
-    if (recv (serv_socket, &other_clients, main_message.size, 0) < 0)
-    {
-        close(serv_socket);
-        close(sockMain);
-        exit(1);
-        //exit
-    }
-    if (select(getdtablesize(), &ffd, NULL, NULL, NULL) < 0) {
-        //exit
-        close(serv_socket);
-        close(sockMain);
-        exit(1);
-    }
+    FD_SET(serv_socket, &ffd);
+    std::cout << "i got connected with " << ntohs(serv.sin_port) << "\n";
     while(1)
     {
         if (!auth) {
             while (1) {
-                std::wcout << "Are you a new User? y/n?\n";
-                std::wcin >> lgn;
-                if (lgn.compare(L"y") || lgn.compare(L"n")) {
-                    newbi = lgn.compare(L"y") == 0 ? true : false;
+                std::cout << "If you want to exit chat write !0\nAre you a new User, if no y/n you will be a new User? y/n? \n";
+                std::cin >> lgn;
+                if (lgn.compare("!0") == 0) {
+                    //
+                    close(sockMain);
+                    std::cout << "Goodbye!\n";
+                    exit(0);
+                }
+                if (lgn.compare("y") == 0) {
+                    newbi = true;
+                    break;
+                }
+                if(lgn.compare("n")) {
+                    break;
                 }
             }
-            std::wcout << L"Enter your login\n";
-            std::wcin >> lgn;
-            //std::wcout << L"Enter your password\n";
-            //std::wcin >>psw;
+            std::cout << "Enter your login\n";
+            std::cin >> lgn;
             auth = true;
             if (newbi) {
-                main_message.type = -1;
-                main_message.size = sizeof(lgn) + sizeof(wchar_t) * lgn.size();
-                send(serv_socket, &main_message, sizeof(main_message), 0);
-                send(serv_socket, &lgn, sizeof(lgn) + sizeof(wchar_t) * lgn.size(), 0);
-                // main_message.size = sizeof(psw);
-                // send(serv_socket, &main_message, sizeof(main_message), 0);
-                // send(serv_socket, &psw, sizeof(psw), 0);
-                // send to server
+                main_message.type = 0;
+                main_message.size = sizeof(char) * lgn.size();
+                send(sockMain, &main_message, sizeof(main_message), 0);
+                send(sockMain, lgn.c_str(), sizeof(char) * lgn.size(), 0);
             }
             else {
-                // password checking need to be here
-                // if ()
-                main_message.type = 0;
-                main_message.size = sizeof(lgn) + sizeof(wchar_t) * lgn.size();
-                send(serv_socket, &main_message, sizeof(main_message), 0);
-                send(serv_socket, &lgn, sizeof(lgn) + sizeof(wchar_t) * lgn.size(), 0);
+                main_message.type = 3;
+                main_message.size = sizeof(char) * lgn.size();
+                send(sockMain, &main_message, sizeof(main_message), 0);
+                send(sockMain, lgn.c_str(), sizeof(char) * lgn.size(), 0);
             }
         }
         else {
             clear_screen();
-            std::wcout << L"You are connected as: " << lgn << L'\n';
+            std::cout << "You are connected as: " << lgn << '\n';
             for (std::size_t i = 0; i < other_clients.size(); i++) {
-                std::wcout << L"User "  << i << L" : " << other_clients[i] << L"\n";
+                std::cout << "User "  << i << " : " << other_clients[i] << "\n";
             }
-            std::wcout << L"Choose chat with user to private chat or type !common to common chat or type !0 to logout\n";
-            std::wcin >> choise;
-            if(choise.compare(L"!0") == 0) {
+            std::cout << "Type !common to common chat, Username to private chat or type !0 to logout.\n";
+            std::cin >> choise;
+            if(choise.compare("!0") == 0) {
                 main_message.type = -1;
-                main_message.size = sizeof(lgn) + sizeof(wchar_t) * lgn.size();
-                send(serv_socket, &main_message, sizeof(main_message), 0);
-                send(serv_socket, &lgn, sizeof(lgn) + sizeof(wchar_t) * lgn.size(), 0);
+                main_message.size = sizeof(char) * lgn.size() + 1;
+                send(sockMain, &main_message, sizeof(main_message), 0);
+                send(sockMain, lgn.c_str(), sizeof(char) * lgn.size(), 0);
                 lgn.clear();
                 psw.clear();
-                lgn = L"\0";
-                psw = L"\0";
+                lgn = "\0";
+                psw = "\0";
                 auth = false;
-                break;
             }
             if (auth) {
-                if (choise.compare(L"!common") == 0) {
-                    while (1) {
-                        // вывод истории
-                        // main_message.type = 5;
-                        // send(sockMain, &main_message, sizeof(main_message), 0);
-                        // if (recv(sockMain, &main_message, sizeof(main_message), 0) == 0) {
-                        // }
-                        // if (recv(sockMain, &history_of_chat, main_message.size, 0) == 0) {
-                        // }
-                        // for (auto& i : history_of_chat) {
-                        //     std::wcout << i << '\n';
-                        // }
-                        if (FD_ISSET(serv_socket, &ffd)) {
-                            if (recv(serv_socket, &main_message, sizeof(main_message), 0) == 0) {
+                // insk = socket(AF_INET, SOCK_STREAM, 0);
+                // if (insk < 0) {
+                //     std::cerr << "cant open innersock\n";
+                //     exit(1);
+                // }
+                // if (bind(insk, (sockaddr *) &ins_set, (socklen_t) sizeof(sockaddr_in)) == -1) {
+                //     std::cerr << "cant bind inner sock\n";
+                //     close(sockMain);
+                //     exit(1);
+                // }
+                // socklen_t sz = sizeof(sockaddr_in);
+                // sockaddr_in tmp;
+                // getsockname(insk, (sockaddr *) &tmp, &sz);
+                enable_raw_mode();
+                pid_t im = fork();
+                // listen(insk, 1);
+                // accept(insk, (sockaddr *) &ins_set, &sz);
+                switch (im) {
+                    case -1:
+                        //exit
+                        break;
+                    case 0:
+                        // sinsk = socket(AF_INET, SOCK_STREAM, 0);
+                        // bind(sinsk, (sockaddr *) &ins_set, sizeof(sockaddr_in));
+                        // connect(sinsk, (sockaddr *) &tmp, (socklen_t) sizeof(sockaddr_in));
+                        // get_screensize(&scrny, &scrnx);
+                        pos_now = 3;
+                        while(1) {
+                            tmp_message.clear();
+                            if (recv(sockMain, &main_message, sizeof(main_message), 0) == 0) {
                                 close(sockMain);
-                                close(serv_socket);
+                            
                                 exit(1);
                                 //exit
                             }
-                            switch(main_message.type) {
+                            pos_now++;
+                            switch (main_message.type) {
                                 case -1:
-                                    if (recv(serv_socket, &tmp_lgn, main_message.size, 0) == 0) {
-                                        close(sockMain);
-                                        close(serv_socket);
-                                        exit(1);
-                                        //exit
+                                    if (recv(sockMain, &buf, main_message.size, 0) == 0) {
+
                                     }
-                                    for(std::size_t i = 0; i < other_clients.size(); i++) {
-                                        if (other_clients[i].compare(tmp_lgn) == 0) {
-                                            other_clients.erase(other_clients.begin() + i);
+                                    tmp_message = buf;
+                                    // tmp_message.append(tmp_lgn.c_str());
+                                    tmp_message.append(" leave chat\n");
+                                    history_of_chat.push_back(tmp_message);
+                                    for (auto i = other_clients.begin(); i != other_clients.end(); i++) {
+                                        if ((*i).compare(tmp_lgn)) {
+                                            other_clients.erase(i);
                                             break;
                                         }
                                     }
-                                    std::wcout << L"User " << tmp_lgn << L" exit chat\n";
-                                    //someone exit
                                     break;
                                 case 0:
-                                    if (recv(serv_socket, &tmp_lgn, main_message.size, 0) == 0) {
-                                        close(sockMain);
-                                        close(serv_socket);
-                                        exit(1);
-                                        //exit
+                                    if (recv(sockMain, &buf, main_message.size, 0) == 0) {
+
                                     }
-                                    other_clients.push_back(tmp_lgn);
-                                    std::wcout << L"User " << tmp_lgn << L" has joined chat\n";
-                                    //someone new
+                                    tmp_message = buf;
+                                    //tmp_message.append(tmp_lgn.c_str());
+                                    tmp_message.append(" has connected to chat\n");
+                                    other_clients.push_back(tmp_lgn.c_str());
+                                    history_of_chat.push_back(tmp_message);
                                     break;
                                 case 1:
-                                    // сервер считает на сколько мы отстали
-                                    while (main_message.type != 3) {
-                                        if (recv(serv_socket, &tmp_message, main_message.size, 0) == 0) {
-                                            close(sockMain);
-                                            close(serv_socket);
-                                            exit(1);
-                                            //exit
-                                        }
-                                        history_of_chat.push_back(tmp_message);
-                                        if (recv(serv_socket, &main_message, sizeof(main_message), 0) == 0) {
-                                            close(sockMain);
-                                            close(serv_socket);
-                                            exit(1);
-                                            //exit
-                                        }
+                                    if (recv(sockMain, &buf, main_message.size, 0) == 0) {
+
                                     }
-                                    for (auto& i : history_of_chat) {
-                                        std::wcout << i; 
-                                    }
-                                    //new messages
+                                    tmp_message = buf;
+                                    history_of_chat.push_back(tmp_message.c_str());
+                                    break; 
+                                case 2:
+                                if (recv(sockMain, &buf, main_message.size, 0) == 0) {
+
+                                }
+                                tmp_message = buf;
+                                history_of_chat.push_back(tmp_message.c_str());
                                     break;
+                                }
+                                // int tmp = pos_now;
+                                // cursorgoto(3, 1);
+                                // disable_raw_mode();
+                                // for (auto i = history_of_chat.begin() + (pos_now >= scrny - 2 ? pos_now : 0); i != history_of_chat.end() || tmp != scrny - 2; i++, tmp++) {
+                                //     std::cout << *i;
+                                // }
+                                // enable_raw_mode();
+                            }
+                    break;
+                default: {
+                    if (choise.compare("!common") == 0) 
+                        private_message = false;
+                    else {
+                        for (auto& i : other_clients) {
+                            if (i.compare(choise) == 0) {
+                                break;
+                            }
+                            else if (i.compare(*other_clients.end()) == 0){
+                                std::cout << "Can't found user " << choise << " Enter User login or enter !common\n";
+                                std::cin >> choise;
+                                if (choise.compare("!common") == 0) {
+                                    private_message = false;
+                                    break;
+                                }
+                                i = other_clients[0];
                             }
                         }
-                        main_message.type = 1;
-                        std::wcout << L"Enter your next message or type !0 to exit from chat\n";
-                        std::wcin >> typed_text;
-                        if (typed_text.compare(L"!0") == 0) {
-                            break;
-                        }
-                        typed_message.append(lgn);
-                        typed_message.append(L" : ");
-                        typed_message.append(typed_text);
-                        typed_message.append(L"\n");
-                        main_message.type = 1;
-                        main_message.size = sizeof(typed_message) + sizeof(wchar_t) * typed_message.size();
-                        send(serv_socket, &main_message, sizeof(main_message), 0);
-                        send(serv_socket, &typed_message, sizeof(typed_message), 0);
+                        private_message = true;
                     }
-                }
-                else {
-                    for (auto& i : other_clients) {
-                        if (i.compare(choise) == 0) {
-                            break;
-                        }
-                        else if (i.compare(*other_clients.end()) == 0){
-                            std::wcout << L"Can't found user " << choise << L" Enter User login\n";
-                            std::wcin >> choise;
-                            i = other_clients[0];
-                        }
-                    }
-                    while (1) {
-                        if (FD_ISSET(serv_socket, &ffd)) {
-                            if (recv(serv_socket, &main_message, sizeof(main_message), 0) == 0) {
-                                close(sockMain);
-                                close(serv_socket);
-                                exit(1);
-                                //exit
+                        while (1) {
+                            typed_message.clear();
+                            typed_text.clear();
+                            cursorgoto(1, scrny - 1);
+                            std::cout << "Enter your next message or type !0 to exit from chat\n" << std::flush;
+                            disable_raw_mode();
+                            std::cin >> typed_text;
+                            enable_raw_mode();
+                            if (typed_text.compare("!0") == 0) {
+                                disable_raw_mode();
+                                // kill(im, SIGTERM);
+                                break;
                             }
-                            switch(main_message.type) {
-                                case -1:
-                                    if (recv(serv_socket, &tmp_lgn, main_message.size, 0) == 0) {
+                            if (private_message)
+                                typed_message.append("Private message from ");
+                            typed_message.append(lgn);
+                            typed_message.append(" : ");
+                            typed_message.append(typed_text);
+                            typed_message.append("\n\0");
+                            if (private_message) {
+                                main_message.type = 2;
+                                main_message.size = sizeof(char) * choise.size() + 1;
+                                send(sockMain, &main_message, sizeof(main_message), 0);
+                                send(sockMain, choise.c_str(), main_message.size, 0);
+                                main_message.size = sizeof(char) * typed_message.size() + 1;
+                                send(sockMain, &main_message, sizeof(main_message), 0);
+                                send(sockMain, typed_message.c_str(), main_message.size, 0);
+                            }   
+                            else {
+                                main_message.type = 1;
+                                main_message.size = sizeof(char) * typed_message.size() + 1;
+                                send(sockMain, &main_message, sizeof(main_message), 0);
+                                send(sockMain, typed_message.c_str(), main_message.size, 0);
+                            }
+                            main_message.type = 4;
+                            send(sockMain, &main_message, sizeof(main_message), 0);
+                            for (int i = 0; main_message.size != i; i++) {
+                                if (recv(sockMain, &main_message, sizeof(main_message), 0) == 0) {
+                                    std::cerr << "Error on getting chat history";
+                                    close(sockMain);
+                                    exit(1);
+                                }
+                                if (main_message.type == 4) {
+                                    if (recv(sockMain, &buf, main_message.size, 0) == 0) {
+                                        std::cerr << "Error on getting chat history";
                                         close(sockMain);
-                                        close(serv_socket);
                                         exit(1);
-                                        //exit
                                     }
-                                    for(std::size_t i = 0; i < other_clients.size(); i++) {
-                                        if (other_clients[i].compare(tmp_lgn) == 0) {
-                                            other_clients.erase(other_clients.begin() + i);
-                                            break;
-                                        }
-                                    }
-                                    std::wcout << L"User " << tmp_lgn << L" exit chat\n";
-                                    //someone exit
-                                    break;
-                                case 0:
-                                    if (recv(serv_socket, &tmp_lgn, main_message.size, 0) == 0) {
-                                        close(sockMain);
-                                        close(serv_socket);
-                                        exit(1);
-                                        //exit
-                                    }
-                                    other_clients.push_back(tmp_lgn);
-                                    std::wcout << L"User " << tmp_lgn << L" has joined chat\n";
-                                    //someone new
-                                    break;
-                                case 1:
-                                    // сервер считает на сколько мы отстали
-                                    while (main_message.type == 1) {
-                                        if (recv(serv_socket, &tmp_message, main_message.size, 0) == 0) {
-                                            close(sockMain);
-                                            close(serv_socket);
-                                            exit(1);
-                                            //exit
-                                        }
-                                        history_of_chat.push_back(tmp_message);
-                                        if (recv(serv_socket, &main_message, sizeof(main_message), 0) == 0) {
-                                            close(sockMain);
-                                            close(serv_socket);
-                                            exit(1);
-                                            //exit
-                                        }
-                                    }
-                                    for (auto& i : history_of_chat) {
-                                        std::wcout << i; 
-                                    }
-                                    //new messages
-                                    break;
+                                    history_of_chat.push_back(buf);
+                                }
                             }
+                            clear_screen();
+                            enable_raw_mode();
+                            cursorgoto(1, 2);
+                            disable_raw_mode();
+                            std::cout << "You are loginnerd as: " << lgn << '\n';
+                            int tmp = 0;
+                            for (auto i = history_of_chat.begin(); tmp + 2 != scrny && i != history_of_chat.end(); i++, tmp++) {
+                                cursorgoto(1, 3 + tmp);
+                                std::cout << *i;
+                            }
+                            // for (; tmp + 2 != scrny; tmp++) {
+                            //     std::cout << "                                                                                                   ";
+                            //     cursorgoto(1, tmp + 4);
+                            // }
+                            std::cout << typed_message;
+                            history_of_chat.push_back(typed_message);
+                            // maybe fork, bur later
                         }
-                        main_message.type = 1;
-                        std::wcout << L"Enter your next message or type !0 to exit from chat\n";
-                        std::wcin >> typed_text;
-                        if (typed_text.compare(L"!0") == 0) {
-                            break;
-                        }
-                        typed_message.append(lgn);
-                        typed_message.append(L" : ");
-                        typed_message.append(typed_text);
-                        typed_message.append(L"\n");
-                        main_message.type = 2;
-                        main_message.size = sizeof(typed_message) + sizeof(wchar_t) * typed_message.size();
-                        send(serv_socket, &main_message, sizeof(main_message), 0);
-                        send(serv_socket, &typed_message, sizeof(typed_message), 0);
+                        disable_raw_mode();
                     }
-                    // todo maybe not do as ip, do as server passing only to someone, checking at server
                 }
             }
         }
