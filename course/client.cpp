@@ -170,6 +170,7 @@ int main(int argc, char** argv)
                 auth = false;
             }
             if (auth) {
+                sleep(1);
                 enable_raw_mode();
                 if (choise.compare("!common") == 0) 
                     private_message = false;

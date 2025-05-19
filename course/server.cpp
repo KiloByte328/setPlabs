@@ -172,7 +172,7 @@ int main()
                             }
                             switch (main_message.type) {
                                 case 0:
-                                    if (recv(innersock, &buf, main_message.size, 0) == 0) {
+                                    if (recv(innersock, &buf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -187,7 +187,7 @@ int main()
                                     history_of_chat.push_back(msg);
                                 break;
                                 case 1:
-                                    if (recv(innersock, &buf, main_message.size, 0) == 0) {
+                                    if (recv(innersock, &buf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -197,7 +197,7 @@ int main()
                                     history_of_chat.push_back(msg);
                                 break;
                                 case 2:
-                                    if (recv(innersock, &buf ,main_message.size, 0) == 0)
+                                    if (recv(innersock, &buf , 100, 0) == 0)
                                     {
                                         close(clientSock);
                                         close(innersock);
@@ -209,7 +209,7 @@ int main()
                                         close(innersock);
                                         exit(1);
                                     }
-                                    if (recv(innersock, &duf, main_message.size, 0) == 0) {
+                                    if (recv(innersock, &duf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -220,7 +220,7 @@ int main()
                                     }
                                 break;
                                 case 3:
-                                    if (recv(innersock, &buf, main_message.size, 0) == 0) {
+                                    if (recv(innersock, &buf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -252,7 +252,7 @@ int main()
                             }
                             switch (from_client.type) {
                                 case 0:
-                                    if (recv(clientSock, &buf, from_client.size, 0) == 0) {
+                                    if (recv(clientSock, &buf, 100, 0) == 0) {
             
                                         close(clientSock);
                                         close(innersock);
@@ -264,7 +264,7 @@ int main()
                                     logins.push_back(new_lgn);
                                 break;
                                 case 1:
-                                    if (recv(clientSock, &buf, from_client.size, 0) == 0) {
+                                    if (recv(clientSock, &buf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -274,7 +274,7 @@ int main()
                                     send(innersock, msg.c_str(), from_client.size, 0);
                                     break;
                                 case 2:
-                                    if (recv (clientSock, &buf, from_client.size, 0) == 0) {
+                                    if (recv (clientSock, &buf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -283,7 +283,7 @@ int main()
                                     if (recv(clientSock, &from_client, sizeof(from_client), 0) == 0) {
 
                                     }
-                                    if (recv(clientSock, &duf, from_client.size, 0) == 0) {
+                                    if (recv(clientSock, &duf, 100, 0) == 0) {
 
                                     }
                                     msg.insert(0, duf, from_client.size);
@@ -295,7 +295,7 @@ int main()
                                     send(innersock, msg.c_str(), from_client.size, 0);
                                     break;
                                 case 3:
-                                    if (recv(clientSock, &buf, from_client.size, 0) == 0) {
+                                    if (recv(clientSock, &buf, 100, 0) == 0) {
                                         close(clientSock);
                                         close(innersock);
                                         exit(1);
@@ -371,7 +371,7 @@ int main()
                 //queue.push_back(main_message);
                 switch(main_message.type) {
                     case 0:
-                        if (recv(in_socks, &buf, main_message.size, 0) == 0) {
+                        if (recv(in_socks, &buf, 100, 0) == 0) {
                             std::cerr << "Can't recive from inner socket login info\n";
                             for (auto& i : innersocks)
                             {
@@ -391,7 +391,7 @@ int main()
                         }
                         break;
                     case 1:
-                        if (recv(in_socks, &buf, main_message.size, 0) == 0) {
+                        if (recv(in_socks, &buf, 100, 0) == 0) {
                             perror("recive fron inner fail ");
                             for (auto& i : innersocks)
                             {
@@ -411,7 +411,7 @@ int main()
                         }
                         break;
                     case 2:
-                        if (recv(in_socks, &buf, main_message.size, 0) == 0) {
+                        if (recv(in_socks, &buf, 100, 0) == 0) {
                             for (auto& i : innersocks)
                             {
                                 close(i);
@@ -432,7 +432,7 @@ int main()
                             return 42;
                         }
                         //queue.push_back(main_message);
-                        if (recv(in_socks, &duf, main_message.size, 0) == 0) {
+                        if (recv(in_socks, &duf, 100, 0) == 0) {
                             for (auto& i : innersocks)
                             {
                                 close(i);
